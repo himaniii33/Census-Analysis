@@ -1,0 +1,118 @@
+select * from Project.dbo.Data1;
+select * from Project.dbo.Data2;
+
+-- for finding number of rows in dataset
+select count(*) from Project..Data1;
+select count(*) from Project..Data2;
+
+-- for finding dataset from jharkhand & Bihar
+select * from Project.dbo.Data1 where state in ('Bihar','Jharkhand');
+
+-- for calculating total population 
+select sum(Population) as [Total Population] from Project.dbo.Data2;
+
+-- for average growth % for whole country
+select avg(Growth)*100 as [Average Growth] from Project.dbo.Data1;
+
+-- for average growth % by state
+select state,avg(Growth)*100 as [Average Growth] from Project.dbo.Data1 group by State;
+
+-- for average sex ratio of the country
+select round(avg(Sex_Ratio),0) as [Average Sex Ratio] from Project.dbo.Data1;
+
+-- for statewise average sex ratio
+select state,round(avg(Sex_Ratio),0) as [Average Sex Ratio] from Project.dbo.Data1 group by State order by [Average Sex Ratio] desc;
+
+-- average Literacy rate
+select state,round(avg(Literacy),0) as [Average Literacy Rate] from Project.dbo.Data1 group by State order by [Average Literacy Rate] desc;
+
+-- state having Literacy rate greater than 90
+select state,round(avg(Literacy),0) as [Average Literacy Rate] from Project.dbo.Data1 group by State having round(avg(Literacy),0)>90 order by [Average Literacy Rate] desc;
+
+-- top 3 state having highest growth rate
+select top 3 state,avg(Growth)*100 as [Average Growth] from Project.dbo.Data1 group by State order by [Average Growth] desc;
+
+-- bottom 3 state having lowest sex ratio
+select top 3 state,round(avg(Sex_Ratio),0) as [Average Sex Ratio] from Project.dbo.Data1 group by State order by [Average Sex Ratio];
+
+-- top and bottom 3 states in Literacy Rate
+
+drop table if exists #topstates;
+create table #topstates(state nvarchar(255),topstate float)
+insert into #topstates
+select state,round(avg(Literacy),0) as [Average Literacy Rate] 
+from Project.dbo.Data1
+group by state 
+order by [Average Literacy Rate] desc;
+
+select top 3 * from #topstates order by #topstates.topstate desc; 
+
+drop table if exists #bottomstates;
+create table #bottomstates(state nvarchar(255),bottomstate float)
+insert into #bottomstates
+select state,round(avg(Literacy),0) as [Average Literacy Rate] 
+from Project.dbo.Data1
+group by state 
+order by [Average Literacy Rate] asc;
+
+select top 3 * from #bottomstates order by #bottomstates.bottomstate asc; 
+
+select * from
+(select top 3 * from #topstates order by #topstates.topstate desc) a
+Union
+select * from 
+(select top 3 * from #bottomstates order by #bottomstates.bottomstate asc) b;
+
+-- state starting with letter 'A'
+select distinct state from Project..Data1 where state like 'A%';
+
+-- state starting with letter 'A' or 'B'
+select distinct state from Project..Data1 where state like 'A%' or state like 'B%';
+
+-- Joining both tables
+select Project..Data1.District,Project..Data1.State,Sex_Ratio,Population 
+from Project..Data1 inner join Project..Data2
+on Project..Data1.District=Project..Data2.District;
+
+-- Total population of males and Females
+select f.District,f.State,round(f.Population/(f.Sex_Ratio+1),0) as Males,round((f.Population*f.Sex_Ratio)/(f.Sex_Ratio+1),0) as Females
+from (select a.District,a.State,a.Sex_Ratio/1000 as Sex_Ratio,b.Population 
+from Project..Data1 a inner join Project..Data2 b
+on a.District=b.District) f;
+
+-- Statewise Total Literate  and illiterate People
+select e.State,sum(e.Literate_People) Total_Literate,sum(e.Illiterate_People)  Total_Illiterate from
+(select d.District,d.State,round(d.Literacy_Ratio*d.Population,0) Literate_People,round((1-d.Literacy_Ratio)*d.Population,0) Illiterate_People
+from (select a.District,a.State,a.Literacy/100 Literacy_Ratio,b.Population 
+from Project..Data1 a inner join Project..Data2 b
+on a.District=b.District) d) e
+group by e.state;
+
+-- Statewise Population in Previous Census
+select e.State,sum(e.Previous_Census_Population) Previous_Census_Population,sum(e.Current_Census_Population) Current_Census_Population
+from(select d.District,d.State,round(d.Population/(1+d.Growth),0) Previous_Census_Population,d.Population Current_Census_Population
+from (select a.District,a.State,a.Growth Growth,b.Population 
+from Project..Data1 a inner join Project..Data2 b
+on a.District=b.District) d) e
+Group by e.State;
+
+-- Population VS Area
+select g.Total_Area/g.Previous_Census_Population Previous,g.Total_Area/Current_Census_Population Present
+from (select q.*,r.Total_Area from(
+select '1' as Keyy,y.* 
+from(select sum(x.Previous_Census_Population) Previous_Census_Population,sum(x.Current_Census_Population) Current_Census_Population
+from(select e.State,sum(e.Previous_Census_Population) Previous_Census_Population,sum(e.Current_Census_Population) Current_Census_Population
+from(select d.District,d.State,round(d.Population/(1+d.Growth),0) Previous_Census_Population,d.Population Current_Census_Population
+from (select a.District,a.State,a.Growth Growth,b.Population 
+from Project..Data1 a inner join Project..Data2 b
+on a.District=b.District) d) e
+Group by e.State) x) y) q 
+inner join
+(select '1' as keyy,z.* from
+(select sum(Area_km2) Total_Area from Project..Data2) z) r
+on q.keyy=r.keyy) g;
+
+-- Top 3 Districts from each states with highest Literacy Rates
+select a.* 
+from (select District,State,Literacy,rank() over(partition by state order by Literacy desc) rnk from Project..Data1) a
+where a.rnk in(1,2,3) order by state;
